@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4×4 ドットマトリックス記憶課題（刺激提示専用）</title>
+  <style>
+    /* ==========================================================================
+       基本スタイル・デザイン変数（清潔感のある白ベース・低ノイズ設計）
+       ========================================================================== */
+    :root {
+      --bg-page: #ffffff;
+      --bg-subtle: #f8fafc;
+      --text-primary: #111827;
+      --text-secondary: #4b5563;
+      --text-muted: #9ca3af;
+      --border-light: #e5e7eb;
+      --border-strong: #111827;
+      --accent: #111827;
+      --accent-hover: #374151;
+      --accent-soft: #f3f4f6;
+      --dot-color: #111827;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    /* ==========================================================================
+       画面コンテナ（5状態：初期 / クリック待機 / 注視点 / 刺激提示 / 提示終了）
+       ========================================================================== */
+    .screen {
+      display: none;
+      min-height: 100vh;
+      width: 100%;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      background-color: var(--bg-page);
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    /* タイミング調整画面（参加者用クリック待機画面） */
+    .screen.ready-screen {
+      cursor: pointer;
+    }
+
+    /* 注視点・刺激提示画面：視覚的ノイズゼロ & カーソル非表示 */
+    .screen.stimulus-pure {
+      padding: 0;
+      cursor: none;
+      overflow: hidden;
+    }
+
+    /* ==========================================================================
+       1. 初期画面（実験者選択画面）
+       ========================================================================== */
+    .setup-container {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .setup-header {
+      text-align: center;
+    }
+
+    .setup-title {
+      font-size: 1.45rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--text-primary);
+    }
+
+    .setup-subtitle {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    .control-panel {
+      width: 100%;
+      background-color: var(--bg-page);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+      padding: 28px 24px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    .section-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    /* パターン選択ボタン（1〜4） */
+    .pattern-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .pattern-btn {
+      aspect-ratio: 1 / 0.85;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      background-color: var(--bg-page);
+      border: 2px solid var(--border-light);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pattern-btn:hover {
+      border-color: var(--accent);
+      background-color: var(--accent-soft);
+    }
+
+    .pattern-btn.selected {
+      background-color: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      box-shadow: 0 3px 10px rgba(17, 24, 39, 0.18);
+    }
+
+    .pattern-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* 提示開始ボタン */
+    .btn-start {
+      width: 100%;
+      padding: 16px 24px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #ffffff;
+      background-color: var(--accent);
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.08s ease;
+    }
+
+    .btn-start:hover {
+      background-color: var(--accent-hover);
+    }
+
+    .btn-start:active {
+      transform: translateY(1px);
+    }
+
+    .btn-start-sub {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 400;
+      opacity: 0.88;
+      margin-top: 2px;
+    }
+
+    /* 控えめなプロトコル注記 */
+    .protocol-note {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* 実験者用の正解配置確認（折りたたみ） */
+    .experimenter-details {
+      width: 100%;
+      border-top: 1px solid var(--border-light);
+      padding-top: 14px;
+      text-align: center;
+    }
+
+    .experimenter-details summary {
+      display: inline-block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 6px;
+      list-style: none;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .experimenter-details summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .experimenter-details summary::before {
+      content: "▸ ";
+    }
+
+    .experimenter-details[open] summary::before {
+      content: "▾ ";
+    }
+
+    .experimenter-details summary:hover {
+      color: var(--text-secondary);
+      background-color: var(--bg-subtle);
+    }
+
+    .preview-list {
+      display: flex;
+      justify-content: center;
+      margin-top: 16px;
+      padding: 16px;
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+    }
+
+    .preview-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .preview-label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    .mini-matrix {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      width: 112px;
+      height: 112px;
+      aspect-ratio: 1 / 1;
+      border: 1.5px solid var(--border-strong);
+      background-color: #ffffff;
+    }
+
+    .mini-cell {
+      border: 0.5px solid #9ca3af;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mini-dot {
+      width: 60%;
+      height: 60%;
+      border-radius: 50%;
+      background-color: var(--dot-color);
+    }
+
+    /* ==========================================================================
+       2. タイミング調整画面（参加者用クリック待機画面）
+       ========================================================================== */
+    .ready-message {
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      letter-spacing: 0.04em;
+      text-align: center;
+      padding: 0 24px;
+    }
+
+    /* ==========================================================================
+       3. ステップ1：注視点（500 ms 固定）
+       ========================================================================== */
+    .fixation-cross {
+      font-size: 72px;
+      font-weight: 400;
+      line-height: 1;
+      color: var(--dot-color);
+      font-family: Arial, sans-serif;
+    }
+
+    /* ==========================================================================
+       4. ステップ2：4×4 ドットマトリックス刺激提示（670 ms 固定）
+       ========================================================================== */
+    .stimulus-matrix {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      width: min(75vmin, 340px);
+      height: min(75vmin, 340px);
+      aspect-ratio: 1 / 1;
+      border: 2px solid var(--border-strong);
+      background-color: #ffffff;
+    }
+
+    .stimulus-cell {
+      border: 1px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #ffffff;
+    }
+
+    .stimulus-dot {
+      width: 58%;
+      height: 58%;
+      border-radius: 50%;
+      background-color: var(--dot-color);
+    }
+
+    /* ==========================================================================
+       4. ステップ3：提示終了画面
+       ========================================================================== */
+    .finished-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      text-align: center;
+    }
+
+    .finished-text {
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+    }
+
+    .btn-return {
+      padding: 8px 18px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background-color: var(--bg-page);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn-return:hover {
+      background-color: var(--bg-subtle);
+      color: var(--text-primary);
+      border-color: #cbd5e1;
+    }
+
+    /* ==========================================================================
+       レスポンシブ調整
+       ========================================================================== */
+    @media (max-width: 520px) {
+      .control-panel {
+        padding: 22px 16px;
+      }
+      .pattern-grid {
+        gap: 8px;
+      }
+      .pattern-btn {
+        font-size: 1.3rem;
+      }
+      .ready-message {
+        font-size: 1.05rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========================================================================
+       (A) 初期画面（実験者用コントロール画面）
+       ======================================================================== -->
+  <main id="screen-setup" class="screen active" aria-label="初期画面">
+    <div class="setup-container">
+      <header class="setup-header">
+        <h1 class="setup-title">4×4 ドットマトリックス記憶課題</h1>
+        <p class="setup-subtitle">刺激提示専用（実験者コントロール）</p>
+      </header>
+
+      <section class="control-panel" aria-label="問題選択と待機画面への移行">
+        <span class="section-label">問題パターンを選択してください</span>
+        <div class="pattern-grid" role="radiogroup" aria-label="問題パターン">
+          <button type="button" class="pattern-btn selected" data-pattern="1" aria-pressed="true">1</button>
+          <button type="button" class="pattern-btn" data-pattern="2" aria-pressed="false">2</button>
+          <button type="button" class="pattern-btn" data-pattern="3" aria-pressed="false">3</button>
+          <button type="button" class="pattern-btn" data-pattern="4" aria-pressed="false">4</button>
+        </div>
+
+        <button type="button" id="btn-start" class="btn-start">
+          待機画面へ進む（参加者用）
+          <span class="btn-start-sub">（Spaceキーでも遷移可能）</span>
+        </button>
+      </section>
+
+      <p class="protocol-note">
+        注視点: 500 ms → 刺激提示: 670 ms（4×4グリッド・3ドット / Sims &amp; Hegarty, 1997 準拠）
+      </p>
+
+      <!-- 実験者向けの正解配置確認（デフォルトで閉じている・選択中パターンのみ表示） -->
+      <details id="experimenter-details" class="experimenter-details">
+        <summary>正解配置を確認（実験者用）</summary>
+        <div id="preview-list" class="preview-list"></div>
+      </details>
+    </div>
+  </main>
+
+  <!-- ========================================================================
+       (B) タイミング調整画面（参加者用クリック待機画面）
+       ======================================================================== -->
+  <section id="screen-ready" class="screen ready-screen" aria-label="開始待機画面">
+    <p class="ready-message">準備ができたら、画面をクリックしてください</p>
+  </section>
+
+  <!-- ========================================================================
+       (C) 注視点画面（500 ms 固定・白背景・カーソル非表示）
+       ======================================================================== -->
+  <section id="screen-fixation" class="screen stimulus-pure" aria-label="注視点">
+    <div class="fixation-cross" aria-hidden="true">＋</div>
+  </section>
+
+  <!-- ========================================================================
+       (D) 刺激提示画面（670 ms 固定・白背景・カーソル非表示）
+       ======================================================================== -->
+  <section id="screen-stimulus" class="screen stimulus-pure" aria-label="ドットマトリックス刺激">
+    <div id="stimulus-matrix" class="stimulus-matrix" role="img" aria-label="4×4ドットマトリックス"></div>
+  </section>
+
+  <!-- ========================================================================
+       (E) 提示終了画面
+       ======================================================================== -->
+  <section id="screen-finished" class="screen" aria-label="提示終了">
+    <div class="finished-box">
+      <p class="finished-text">提示が終了しました</p>
+      <button type="button" id="btn-return" class="btn-return">初期画面に戻る（Esc）</button>
+    </div>
+  </section>
+
+  <script>
+    /**
+     * 4×4 ドットマトリックス記憶課題（刺激提示専用）
+     * - Sims & Hegarty (1997) 準拠：注視点 500 ms → 刺激提示 670 ms（固定）
+     * - 参加者クリック待機画面（タイミング調整機能）付き
+     * - performance.now() + requestAnimationFrame によるミリ秒単位の正確な時間制御
+     */
+    (function () {
+      'use strict';
+
+      /* ======================================================================
+         定数定義（時間固定・4パターンの行優先インデックス 0〜15）
+         ====================================================================== */
+      const FIXATION_DURATION_MS = 500;
+      const STIMULUS_DURATION_MS = 670;
+      const GRID_CELL_COUNT = 16;
+
+      const PATTERNS = {
+        1: [1, 7, 8],   // 1行目2列, 2行目4列, 3行目1列
+        2: [2, 4, 15],  // 1行目3列, 2行目1列, 4行目4列
+        3: [0, 6, 13],  // 1行目1列, 2行目3列, 4行目2列
+        4: [5, 11, 12]  // 2行目2列, 3行目4列, 4行目1列
+      };
+
+      /* ======================================================================
+         状態管理
+         ====================================================================== */
+      let currentScreen = 'screen-setup';
+      let selectedPattern = 1;
+      let rafId = null;
+      let isReadyArmed = false;
+      let readyArmTimerId = null;
+
+      /* ======================================================================
+         DOM要素
+         ====================================================================== */
+      const screens = {
+        setup: document.getElementById('screen-setup'),
+        ready: document.getElementById('screen-ready'),
+        fixation: document.getElementById('screen-fixation'),
+        stimulus: document.getElementById('screen-stimulus'),
+        finished: document.getElementById('screen-finished')
+      };
+
+      const patternButtons = document.querySelectorAll('.pattern-btn');
+      const btnStart = document.getElementById('btn-start');
+      const btnReturn = document.getElementById('btn-return');
+      const stimulusMatrixEl = document.getElementById('stimulus-matrix');
+      const previewListEl = document.getElementById('preview-list');
+      const experimenterDetailsEl = document.getElementById('experimenter-details');
+
+      /* ======================================================================
+         画面切り替え・高精度タイマー
+         ====================================================================== */
+
+      /**
+       * 指定した画面に切り替え、進行中のタイマーがあれば確実に停止する
+       */
+      function showScreen(screenId) {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        if (readyArmTimerId !== null) {
+          clearTimeout(readyArmTimerId);
+          readyArmTimerId = null;
+        }
+        isReadyArmed = false;
+
+        Object.values(screens).forEach((el) => el.classList.remove('active'));
+        const target = document.getElementById(screenId);
+        if (target) {
+          target.classList.add('active');
+          currentScreen = screenId;
+        }
+      }
+
+      /**
+       * performance.now() と requestAnimationFrame によるミリ秒単位の待機処理
+       * @param {number} durationMs - 待機する時間（ms）
+       * @param {Function} onComplete - 経過後に実行するコールバック
+       */
+      function waitPreciseMs(durationMs, onComplete) {
+        const startTime = performance.now();
+        function frame(now) {
+          if (now - startTime >= durationMs) {
+            rafId = null;
+            onComplete();
+          } else {
+            rafId = requestAnimationFrame(frame);
+          }
+        }
+        rafId = requestAnimationFrame(frame);
+      }
+
+      /* ======================================================================
+         グリッド描画
+         ====================================================================== */
+
+      /**
+       * 本番用の4×4ドットマトリックスを描画
+       */
+      function renderStimulusMatrix(patternNum) {
+        const dotSet = new Set(PATTERNS[patternNum]);
+        stimulusMatrixEl.innerHTML = '';
+
+        for (let i = 0; i < GRID_CELL_COUNT; i++) {
+          const cell = document.createElement('div');
+          cell.className = 'stimulus-cell';
+          if (dotSet.has(i)) {
+            const dot = document.createElement('div');
+            dot.className = 'stimulus-dot';
+            cell.appendChild(dot);
+          }
+          stimulusMatrixEl.appendChild(cell);
+        }
+      }
+
+      /**
+       * 実験者確認用（details内）の1〜4ミニグリッドを初期生成
+       */
+      function renderExperimenterPreviews() {
+        previewListEl.innerHTML = '';
+
+        Object.keys(PATTERNS).forEach((key) => {
+          const dotSet = new Set(PATTERNS[key]);
+
+          const item = document.createElement('div');
+          item.className = 'preview-item';
+
+          const label = document.createElement('span');
+          label.className = 'preview-label';
+          label.textContent = `パターン ${key}`;
+
+          const grid = document.createElement('div');
+          grid.className = 'mini-matrix';
+
+          for (let i = 0; i < GRID_CELL_COUNT; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'mini-cell';
+            if (dotSet.has(i)) {
+              const dot = document.createElement('div');
+              dot.className = 'mini-dot';
+              cell.appendChild(dot);
+            }
+            grid.appendChild(cell);
+          }
+
+          item.appendChild(label);
+          item.appendChild(grid);
+          previewListEl.appendChild(item);
+        });
+      }
+
+      /* ======================================================================
+         パターン選択 & 提示シーケンス
+         ====================================================================== */
+
+      function selectPattern(num) {
+        selectedPattern = num;
+        patternButtons.forEach((btn) => {
+          const isTarget = parseInt(btn.dataset.pattern, 10) === num;
+          btn.classList.toggle('selected', isTarget);
+          btn.setAttribute('aria-pressed', String(isTarget));
+        });
+      }
+
+      /**
+       * 実験者確認用（details内）に現在選択中のパターンのミニグリッドを描画
+       */
+      function renderSelectedPreview(patternNum) {
+        const dotSet = new Set(PATTERNS[patternNum]);
+        previewListEl.innerHTML = '';
+
+        const item = document.createElement('div');
+        item.className = 'preview-item';
+
+        const label = document.createElement('span');
+        label.className = 'preview-label';
+        label.textContent = `選択中：パターン ${patternNum}`;
+
+        const grid = document.createElement('div');
+        grid.className = 'mini-matrix';
+
+        for (let i = 0; i < GRID_CELL_COUNT; i++) {
+          const cell = document.createElement('div');
+          cell.className = 'mini-cell';
+          if (dotSet.has(i)) {
+            const dot = document.createElement('div');
+            dot.className = 'mini-dot';
+            cell.appendChild(dot);
+          }
+          grid.appendChild(cell);
+        }
+
+        item.appendChild(label);
+        item.appendChild(grid);
+        previewListEl.appendChild(item);
+      }
+
+      /* ======================================================================
+         パターン選択 & 提示シーケンス
+         ====================================================================== */
+
+      function selectPattern(num) {
+        selectedPattern = num;
+        patternButtons.forEach((btn) => {
+          const isTarget = parseInt(btn.dataset.pattern, 10) === num;
+          btn.classList.toggle('selected', isTarget);
+          btn.setAttribute('aria-pressed', String(isTarget));
+        });
+        renderSelectedPreview(num);
+      }
+
+      /**
+       * (B) タイミング調整画面（クリック待機画面）へ移行する
+       * 初期画面からのクリック伝播や誤連打を防ぐため、遷移直後は入力を短時間ガードする
+       */
+      function enterReadyScreen() {
+        if (currentScreen !== 'screen-setup') return;
+
+        // 被験者への意図しない露出を防ぐため、確認用折りたたみは自動で閉じる
+        experimenterDetailsEl.open = false;
+
+        // 刺激DOMを事前に生成（提示時の描画遅延を最小化）
+        renderStimulusMatrix(selectedPattern);
+
+        showScreen('screen-ready');
+
+        // 初期画面のクリックイベント完了後に待機画面のクリック受付を有効化
+        readyArmTimerId = setTimeout(() => {
+          readyArmTimerId = null;
+          if (currentScreen === 'screen-ready') {
+            isReadyArmed = true;
+          }
+        }, 120);
+      }
+
+      /**
+       * (C) 注視点(500ms) → (D) 刺激提示(670ms) → (E) 提示終了 のシーケンスを実行
+       */
+      function startPresentation() {
+        if (currentScreen !== 'screen-ready' || !isReadyArmed) return;
+
+        // ステップ1：注視点（500 ms）
+        showScreen('screen-fixation');
+        waitPreciseMs(FIXATION_DURATION_MS, () => {
+          // ステップ2：ドットマトリックス提示（670 ms）
+          showScreen('screen-stimulus');
+          waitPreciseMs(STIMULUS_DURATION_MS, () => {
+            // ステップ3：即座にグリッドを消去し終了画面へ
+            stimulusMatrixEl.innerHTML = '';
+            showScreen('screen-finished');
+          });
+        });
+      }
+
+      function returnToSetup() {
+        stimulusMatrixEl.innerHTML = '';
+        showScreen('screen-setup');
+      }
+
+      /* ======================================================================
+         イベントリスナー
+         ====================================================================== */
+
+      patternButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          selectPattern(parseInt(btn.dataset.pattern, 10));
+        });
+      });
+
+      btnStart.addEventListener('click', (e) => {
+        e.stopPropagation();
+        enterReadyScreen();
+      });
+
+      // タイミング調整画面：画面の任意の場所をクリックで注視点へ移行
+      screens.ready.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startPresentation();
+      });
+
+      btnReturn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        returnToSetup();
+      });
+
+      // キーボード操作（初期画面: Spaceで待機画面へ・1〜4で選択 / 待機中・提示中・終了時: Escで戻る）
+      document.addEventListener('keydown', (e) => {
+        if (currentScreen === 'screen-setup') {
+          if (e.code === 'Space' || e.key === ' ') {
+            // details/summary操作中でなければ待機画面へ移行
+            if (document.activeElement && document.activeElement.tagName === 'SUMMARY') {
+              return;
+            }
+            e.preventDefault();
+            enterReadyScreen();
+          } else if (['1', '2', '3', '4'].includes(e.key)) {
+            selectPattern(parseInt(e.key, 10));
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          returnToSetup();
+        }
+      });
+
+      /* ======================================================================
+         初期化
+         ====================================================================== */
+      window.addEventListener('load', () => {
+        renderSelectedPreview(selectedPattern);
+      });
+    })();
+  </script>
+</body>
+</html>
